@@ -875,186 +875,365 @@ def scrapear_yapo(termino, cantidad):
 
 def scrapear_mercadolibre(termino, cantidad):
     url = f"https://listado.mercadolibre.cl/{termino}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
-    html = BeautifulSoup(response.text, 'html.parser')
-    productos = html.find_all('div', class_="poly-card poly-card--list poly-card--large poly-card--CORE")
-    resultados = []
-    for producto in productos:
-        if len(resultados) >= cantidad:
-            break
-        # Nombre y enlace
-        nombre_elem = producto.find('a', class_='poly-component__title')
-        nombre = nombre_elem.get_text(strip=True) if nombre_elem else ''
-        url_producto = nombre_elem['href'] if nombre_elem and nombre_elem.has_attr('href') else ''
-        # Marca
-        marca_elem = producto.find('span', class_='poly-component__seller')
-        marca = ''
-        if marca_elem:
-            marca_text = marca_elem.get_text(strip=True)
-            if marca_text.lower().startswith('por '):
-                marca = marca_text[4:].strip()
-            else:
-                marca = marca_text.strip()
-        # Precio actual
-        preciofinal = ''
-        precio_elem = producto.find('div', class_='poly-price__current')
-        if precio_elem:
-            precio_span = precio_elem.find('span', class_='andes-money-amount__fraction')
-            preciofinal = precio_span.get_text(strip=True) if precio_span else ''
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        html = BeautifulSoup(response.text, 'html.parser')
         
-        # Convertir precio a decimal
-        precio_decimal = limpiar_precio(preciofinal)
+        # Múltiples selectores para productos de MercadoLibre
+        selectores_productos = [
+            'div[class*="poly-card"]',
+            'div[class*="ui-search-result"]',
+            'li[class*="ui-search-layout__item"]',
+            'div[class*="andes-card"]',
+            'article[class*="ui-search-result"]'
+        ]
         
-        # Descuento
-        descuento_elem = producto.find('span', class_='andes-money-amount__discount')
-        descuento_texto = descuento_elem.get_text(strip=True) if descuento_elem else None
-        descuento_decimal = limpiar_descuento(descuento_texto) if descuento_texto else None
+        productos = []
+        for selector in selectores_productos:
+            productos = html.select(selector)
+            if productos:
+                break
         
-        # Obtener id_tienda y dirección
-        id_tienda, direccion_tienda = obtener_o_crear_tienda_por_url(url_producto)
+        resultados = []
+        for producto in productos:
+            if len(resultados) >= cantidad:
+                break
+                
+            try:
+                # Nombre y enlace - múltiples selectores
+                nombre = ''
+                url_producto = ''
+                
+                # Buscar nombre en diferentes elementos
+                nombre_selectors = [
+                    'a[class*="ui-search-item__group__element"]',
+                    'a[class*="ui-search-link"]',
+                    'h2[class*="ui-search-item__title"]',
+                    'span[class*="ui-search-item__title"]',
+                    'a[class*="poly-component__title"]'
+                ]
+                
+                for selector in nombre_selectors:
+                    nombre_elem = producto.select_one(selector)
+                    if nombre_elem:
+                        nombre = nombre_elem.get_text(strip=True)
+                        url_producto = nombre_elem.get('href', '')
+                        break
+                
+                if not nombre:
+                    continue  # Saltar si no hay nombre
+                
+                # Marca - extraer del nombre o buscar específicamente
+                marca = nombre.split()[0] if nombre else ''
+                
+                # Precio - múltiples selectores
+                precio_decimal = None
+                precio_selectors = [
+                    'span[class*="andes-money-amount__fraction"]',
+                    'span[class*="price-tag-fraction"]',
+                    'span[class*="price-tag-amount"]',
+                    'span[class*="ui-search-price-amount__fraction"]'
+                ]
+                
+                for selector in precio_selectors:
+                    precio_elem = producto.select_one(selector)
+                    if precio_elem:
+                        precio_texto = precio_elem.get_text(strip=True)
+                        precio_decimal = limpiar_precio(precio_texto)
+                        if precio_decimal:
+                            break
+                
+                # Descuento
+                descuento_decimal = None
+                descuento_selectors = [
+                    'span[class*="andes-money-amount__discount"]',
+                    'span[class*="price-tag__discount"]',
+                    'span[class*="ui-search-price-amount__discount"]'
+                ]
+                
+                for selector in descuento_selectors:
+                    descuento_elem = producto.select_one(selector)
+                    if descuento_elem:
+                        descuento_texto = descuento_elem.get_text(strip=True)
+                        descuento_decimal = limpiar_descuento(descuento_texto)
+                        if descuento_decimal:
+                            break
+                
+                # Solo agregar si tiene nombre y precio
+                if nombre and precio_decimal:
+                    resultados.append({
+                        'nombre': nombre,
+                        'marca': marca,
+                        'precio': precio_decimal,
+                        'descuento': descuento_decimal,
+                        'preciofinal': precio_decimal - (descuento_decimal or 0),
+                        'url_producto': url_producto,
+                        'id_tienda': 2,  # MercadoLibre
+                        'direccion_tienda': 'Santiago, Chile'
+                    })
+                    
+            except Exception as e:
+                continue  # Si hay error con un producto, continuar
         
-        resultados.append({
-            'nombre': nombre,
-            'marca': marca,
-            'precio': precio_decimal,
-            'descuento': descuento_decimal,
-            'preciofinal': precio_decimal,
-            'url_producto': url_producto,
-            'id_tienda': id_tienda,
-            'direccion_tienda': direccion_tienda
-        })
-    return resultados
+        return resultados
+        
+    except Exception as e:
+        print(f"❌ Error al scrapear MercadoLibre: {e}")
+        return []
 
 def scrapear_paris(termino, cantidad):
     url = f"https://www.paris.cl/search/?q={termino}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
-    html = BeautifulSoup(response.text, 'html.parser')
-    productos = html.select('div[role="gridcell"].h-full')
-    resultados = []
-    for producto in productos:
-        if len(resultados) >= cantidad:
-            break
-        # Marca
-        marca_elem = producto.select_one('span.ui-font-semibold')
-        marca = marca_elem.text.strip() if marca_elem else ''
-        # Nombre (el segundo span.ui-line-clamp-2)
-        nombre_elem = producto.select('span.ui-line-clamp-2')
-        nombre = nombre_elem[1].text.strip() if nombre_elem and len(nombre_elem) > 1 else (nombre_elem[0].text.strip() if nombre_elem else '')
-        # Precio: buscar cualquier <span> que contenga un $ y números
-        precio_elem = None
-        for span in producto.find_all('span'):
-            texto = span.get_text()
-            if '$' in texto and any(char.isdigit() for char in texto):
-                precio_elem = span
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        html = BeautifulSoup(response.text, 'html.parser')
+        
+        # Múltiples selectores para productos de Paris
+        selectores_productos = [
+            'div[role="gridcell"]',
+            'div[class*="product"]',
+            'div[class*="item"]',
+            'article[class*="product"]',
+            'div[class*="card"]'
+        ]
+        
+        productos = []
+        for selector in selectores_productos:
+            productos = html.select(selector)
+            if productos:
                 break
-        precio_texto = precio_elem.text.strip() if precio_elem else ''
         
-        # Convertir precio a decimal
-        precio_decimal = limpiar_precio(precio_texto)
+        resultados = []
+        for producto in productos:
+            if len(resultados) >= cantidad:
+                break
+                
+            try:
+                # Nombre - múltiples selectores
+                nombre = ''
+                nombre_selectors = [
+                    'span[class*="ui-line-clamp"]',
+                    'h3[class*="product"]',
+                    'span[class*="product-name"]',
+                    'div[class*="product-title"]',
+                    'span[class*="title"]'
+                ]
+                
+                for selector in nombre_selectors:
+                    nombre_elem = producto.select_one(selector)
+                    if nombre_elem:
+                        nombre = nombre_elem.get_text(strip=True)
+                        break
+                
+                if not nombre:
+                    continue  # Saltar si no hay nombre
+                
+                # Marca - extraer del nombre o buscar específicamente
+                marca = nombre.split()[0] if nombre else ''
+                
+                # Precio - múltiples selectores
+                precio_decimal = None
+                precio_selectors = [
+                    'span[class*="price"]',
+                    'span[class*="amount"]',
+                    'div[class*="price"]',
+                    'span:contains("$")'
+                ]
+                
+                for selector in precio_selectors:
+                    precio_elem = producto.select_one(selector)
+                    if precio_elem:
+                        precio_texto = precio_elem.get_text(strip=True)
+                        if '$' in precio_texto and any(char.isdigit() for char in precio_texto):
+                            precio_decimal = limpiar_precio(precio_texto)
+                            if precio_decimal:
+                                break
+                
+                # Descuento
+                descuento_decimal = None
+                descuento_selectors = [
+                    'div[data-testid="paris-label"]',
+                    'span[class*="discount"]',
+                    'div[class*="badge"]',
+                    'span[class*="offer"]'
+                ]
+                
+                for selector in descuento_selectors:
+                    descuento_elem = producto.select_one(selector)
+                    if descuento_elem:
+                        descuento_texto = descuento_elem.get_text(strip=True)
+                        descuento_decimal = limpiar_descuento(descuento_texto)
+                        if descuento_decimal:
+                            break
+                
+                # URL del producto
+                url_producto = ''
+                enlace_selectors = [
+                    'a[href*="/producto/"]',
+                    'a[href*="/p/"]',
+                    'a[class*="product-link"]'
+                ]
+                
+                for selector in enlace_selectors:
+                    enlace = producto.select_one(selector)
+                    if enlace:
+                        url_producto = enlace.get('href', '')
+                        if url_producto and not url_producto.startswith('http'):
+                            url_producto = 'https://www.paris.cl' + url_producto
+                        break
+                
+                # Solo agregar si tiene nombre y precio
+                if nombre and precio_decimal:
+                    resultados.append({
+                        'nombre': nombre,
+                        'marca': marca,
+                        'precio': precio_decimal,
+                        'descuento': descuento_decimal,
+                        'preciofinal': precio_decimal - (descuento_decimal or 0),
+                        'url_producto': url_producto,
+                        'id_tienda': 3,  # Paris
+                        'direccion_tienda': 'Santiago, Chile'
+                    })
+                    
+            except Exception as e:
+                continue  # Si hay error con un producto, continuar
         
-        # Descuento (buscar badge de porcentaje)
-        descuento_elem = producto.find('div', attrs={'data-testid': 'paris-label'})
-        descuento_texto = descuento_elem.get_text(strip=True) if descuento_elem else None
-        descuento_decimal = limpiar_descuento(descuento_texto) if descuento_texto else None
+        return resultados
         
-        # Enlace
-        enlace = producto.find('a', href=True)
-        url_producto = enlace['href'] if enlace else ''
-        if url_producto and not url_producto.startswith('http'):
-            url_producto = 'https://www.paris.cl' + url_producto
-        
-        # Obtener id_tienda y dirección
-        id_tienda, direccion_tienda = obtener_o_crear_tienda_por_url(url_producto)
-        
-        resultados.append({
-            'nombre': nombre,
-            'marca': marca,
-            'precio': precio_decimal,
-            'descuento': descuento_decimal,
-            'preciofinal': precio_decimal,
-            'url_producto': url_producto,
-            'id_tienda': id_tienda,
-            'direccion_tienda': direccion_tienda
-        })
-    return resultados
+    except Exception as e:
+        print(f"❌ Error al scrapear Paris: {e}")
+        return []
 
 def scrapear_falabella(termino, cantidad):
     url = f"https://www.falabella.com/falabella-cl/search?Ntt={termino}"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    response = requests.get(url, headers=headers)
-    html = BeautifulSoup(response.text, 'html.parser')
     
-    # Buscar productos en Falabella (basado en la estructura HTML proporcionada)
-    productos = html.find_all('div', class_='jsx-2858414180')
-    resultados = []
-    
-    for producto in productos:
-        if len(resultados) >= cantidad:
-            break
-            
-        try:
-            # Buscar nombre del producto
-            nombre_elem = producto.find('span', class_='copy10')
-            nombre = nombre_elem.text.strip() if nombre_elem else ''
-            
-            # Buscar precio actual (el primer precio en la lista)
-            precio_elem = producto.find('li', class_='prices-0')
-            if precio_elem:
-                precio_span = precio_elem.find('span', class_='copy10')
-                precio_texto = precio_span.text.strip() if precio_span else ''
-            else:
-                precio_texto = ''
-            
-            # Buscar precio normal (precio tachado)
-            precio_normal_elem = producto.find('li', class_='prices-1')
-            if precio_normal_elem:
-                precio_normal_span = precio_normal_elem.find('span', class_='copy3')
-                precio_normal_texto = precio_normal_span.text.strip() if precio_normal_span else ''
-            else:
-                precio_normal_texto = ''
-            
-            # Convertir precios a decimal
-            precio_decimal = limpiar_precio(precio_texto)
-            precio_normal_decimal = limpiar_precio(precio_normal_texto)
-            
-            # Buscar descuento
-            descuento_elem = producto.find('span', class_='discount-badge-item')
-            descuento_texto = descuento_elem.text.strip() if descuento_elem else None
-            descuento_decimal = limpiar_descuento(descuento_texto) if descuento_texto else None
-            
-            # Buscar enlace del producto
-            enlace = producto.find('a', href=True)
-            url_producto = enlace['href'] if enlace else ''
-            if url_producto and not url_producto.startswith('http'):
-                url_producto = 'https://www.falabella.com' + url_producto
-            
-            # Extraer marca del nombre (primera palabra)
-            marca = nombre.split()[0] if nombre else ''
-            
-            # Precio final (usar precio actual si existe, sino precio normal)
-            preciofinal = precio_decimal if precio_decimal else precio_normal_decimal
-            
-            # Obtener id_tienda y dirección
-            id_tienda, direccion_tienda = obtener_o_crear_tienda_por_url(url_producto)
-            
-            if nombre and (precio_decimal or precio_normal_decimal):  # Solo agregar si tiene nombre y precio
-                resultados.append({
-                    'nombre': nombre,
-                    'marca': marca,
-                    'precio': precio_normal_decimal,  # Precio original
-                    'descuento': descuento_decimal,
-                    'preciofinal': preciofinal,  # Precio final (con descuento)
-                    'url_producto': url_producto,
-                    'id_tienda': id_tienda,
-                    'direccion_tienda': direccion_tienda
-                })
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        html = BeautifulSoup(response.text, 'html.parser')
+        
+        # Múltiples selectores para productos de Falabella
+        selectores_productos = [
+            'div[class*="jsx-"]',
+            'div[class*="product"]',
+            'div[class*="item"]',
+            'article[class*="product"]',
+            'div[class*="card"]',
+            'div[class*="search-result"]'
+        ]
+        
+        productos = []
+        for selector in selectores_productos:
+            productos = html.select(selector)
+            if productos:
+                break
+        
+        resultados = []
+        for producto in productos:
+            if len(resultados) >= cantidad:
+                break
                 
-        except Exception as e:
-            continue  # Si hay error con un producto, continuar con el siguiente
-    
-    return resultados
+            try:
+                # Nombre - múltiples selectores
+                nombre = ''
+                nombre_selectors = [
+                    'span[class*="copy10"]',
+                    'span[class*="product-name"]',
+                    'h3[class*="product"]',
+                    'span[class*="title"]',
+                    'div[class*="product-title"]'
+                ]
+                
+                for selector in nombre_selectors:
+                    nombre_elem = producto.select_one(selector)
+                    if nombre_elem:
+                        nombre = nombre_elem.get_text(strip=True)
+                        break
+                
+                if not nombre:
+                    continue  # Saltar si no hay nombre
+                
+                # Marca - extraer del nombre
+                marca = nombre.split()[0] if nombre else ''
+                
+                # Precio - múltiples selectores
+                precio_decimal = None
+                precio_selectors = [
+                    'span[class*="copy10"]',
+                    'span[class*="price"]',
+                    'span[class*="amount"]',
+                    'div[class*="price"]',
+                    'span:contains("$")'
+                ]
+                
+                for selector in precio_selectors:
+                    precio_elem = producto.select_one(selector)
+                    if precio_elem:
+                        precio_texto = precio_elem.get_text(strip=True)
+                        if '$' in precio_texto and any(char.isdigit() for char in precio_texto):
+                            precio_decimal = limpiar_precio(precio_texto)
+                            if precio_decimal:
+                                break
+                
+                # Descuento
+                descuento_decimal = None
+                descuento_selectors = [
+                    'span[class*="discount-badge"]',
+                    'span[class*="discount"]',
+                    'div[class*="badge"]',
+                    'span[class*="offer"]',
+                    'div[class*="discount"]'
+                ]
+                
+                for selector in descuento_selectors:
+                    descuento_elem = producto.select_one(selector)
+                    if descuento_elem:
+                        descuento_texto = descuento_elem.get_text(strip=True)
+                        descuento_decimal = limpiar_descuento(descuento_texto)
+                        if descuento_decimal:
+                            break
+                
+                # URL del producto
+                url_producto = ''
+                enlace_selectors = [
+                    'a[href*="/producto/"]',
+                    'a[href*="/p/"]',
+                    'a[class*="product-link"]',
+                    'a[href*="/falabella-cl/product/"]'
+                ]
+                
+                for selector in enlace_selectors:
+                    enlace = producto.select_one(selector)
+                    if enlace:
+                        url_producto = enlace.get('href', '')
+                        if url_producto and not url_producto.startswith('http'):
+                            url_producto = 'https://www.falabella.com' + url_producto
+                        break
+                
+                # Solo agregar si tiene nombre y precio
+                if nombre and precio_decimal:
+                    resultados.append({
+                        'nombre': nombre,
+                        'marca': marca,
+                        'precio': precio_decimal,
+                        'descuento': descuento_decimal,
+                        'preciofinal': precio_decimal - (descuento_decimal or 0),
+                        'url_producto': url_producto,
+                        'id_tienda': 4,  # Falabella
+                        'direccion_tienda': 'Santiago, Chile'
+                    })
+                    
+            except Exception as e:
+                continue  # Si hay error con un producto, continuar
+        
+        return resultados
+        
+    except Exception as e:
+        print(f"❌ Error al scrapear Falabella: {e}")
+        return []
 
 # ========== FUNCIONES AUXILIARES ==========
 

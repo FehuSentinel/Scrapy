@@ -11,7 +11,7 @@ import time
 import sys
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
-from scrapyProductos import scrapear_yapo
+from scrapyProductos import scrapear_yapo, scrapear_mercadolibre, scrapear_paris, scrapear_falabella
 
 # Cargar variables de entorno
 load_dotenv('.env')
@@ -533,59 +533,54 @@ def main():
     usuarios = generar_usuarios_con_edad(cantidad_usuarios)
     
     # 2. Scraping de productos
+    productos_raw = []
+    
     if tienda_seleccionada['nombre'].lower() == 'yapo':
         productos_raw = scrapear_yapo(termino_busqueda, cantidad_productos)
-        productos = []
-        promociones = []
-        promo_id_counter = 1
-        for i, prod in enumerate(productos_raw):
-            promo_id = None
-            # Si el producto tiene descuento real, crear promoción
-            if prod.get('descuento') and prod.get('descuento') > 0:
-                # Usar la fecha actual como inicio y fin (puedes mejorar esto si el scraping trae fechas)
-                fecha_inicio = datetime.now().date()
-                fecha_fin = fecha_inicio + timedelta(days=30)
-                promociones.append({
-                    "id_promocion": promo_id_counter,
-                    "tipo_promocion": "Descuento real Yapo",
-                    "fecha_inicio": fecha_inicio,
-                    "fecha_fin": fecha_fin
-                })
-                promo_id = promo_id_counter
-                promo_id_counter += 1
-            productos.append({
-                "id_producto": i + 1,
-                "nombre": prod.get('nombre', ''),
-                "marca": prod.get('marca', ''),
-                "precio": prod.get('precio', 0),
-                "url_producto": prod.get('url_producto', ''),
-                "promocion": promo_id,
-                "preciofinal": prod.get('preciofinal', 0),
-                "id_tienda": 1  # Yapo
-            })
+    elif tienda_seleccionada['nombre'].lower() == 'mercadolibre':
+        productos_raw = scrapear_mercadolibre(termino_busqueda, cantidad_productos)
+    elif tienda_seleccionada['nombre'].lower() == 'paris':
+        productos_raw = scrapear_paris(termino_busqueda, cantidad_productos)
+    elif tienda_seleccionada['nombre'].lower() == 'falabella':
+        productos_raw = scrapear_falabella(termino_busqueda, cantidad_productos)
     else:
-        productos = scrapear_productos_con_promociones(
+        # Fallback para otras tiendas
+        productos_raw = scrapear_productos_con_promociones(
             tienda_seleccionada['url'], 
             termino_busqueda, 
             cantidad_productos
         )
-        promociones = []
-        promo_id_counter = 1
-        for producto in productos:
-            promo_id = None
-            if producto.get('promocion') and producto.get('promocion') > 0:
-                fecha_inicio = datetime.now().date()
-                fecha_fin = fecha_inicio + timedelta(days=30)
-                promociones.append({
-                    "id_promocion": promo_id_counter,
-                    "tipo_promocion": "Descuento real",
-                    "fecha_inicio": fecha_inicio,
-                    "fecha_fin": fecha_fin
-                })
-                promo_id = promo_id_counter
-                promo_id_counter += 1
-            producto['promocion'] = promo_id
-            producto['id_tienda'] = tienda_info['id_tienda']
+    
+    # Procesar productos y crear promociones
+    productos = []
+    promociones = []
+    promo_id_counter = 1
+    
+    for i, prod in enumerate(productos_raw):
+        promo_id = None
+        # Si el producto tiene descuento real, crear promoción
+        if prod.get('descuento') and prod.get('descuento') > 0:
+            fecha_inicio = datetime.now().date()
+            fecha_fin = fecha_inicio + timedelta(days=30)
+            promociones.append({
+                "id_promocion": promo_id_counter,
+                "tipo_promocion": f"Descuento real {tienda_seleccionada['nombre']}",
+                "fecha_inicio": fecha_inicio,
+                "fecha_fin": fecha_fin
+            })
+            promo_id = promo_id_counter
+            promo_id_counter += 1
+        
+        productos.append({
+            "id_producto": i + 1,
+            "nombre": prod.get('nombre', ''),
+            "marca": prod.get('marca', ''),
+            "precio": prod.get('precio', 0),
+            "url_producto": prod.get('url_producto', ''),
+            "promocion": promo_id,
+            "preciofinal": prod.get('preciofinal', 0),
+            "id_tienda": tienda_info['id_tienda']
+        })
     
     # 3. Generar tiempo
     tiempo_registros = generar_tiempo(promociones)
