@@ -11,7 +11,7 @@ def mostrar_menu():
     print("1. 🚀 Scraper Integrado (Datos Completos)")
     print("2. 📁 Cargar archivo CSV a la base de datos")
     print("3. 📂 Ver archivos disponibles")
-    print("4. 🗄️ Ver tablas de la base de datos")
+    print("4. 🔍 Consultar DB conectada")
     print("0. 🚪 Salir")
     print("="*50)
 
@@ -96,12 +96,12 @@ def ver_archivos_disponibles():
     time.sleep(3)
 
 def ejecutar_ver_tablas():
-    """Ejecuta el script para ver tablas de la base de datos"""
-    print("\n🔄 Abriendo visor de tablas...")
+    """Ejecuta el consultor SQL de la base de datos"""
+    print("\n🔄 Abriendo consultor SQL...")
     try:
         # Ejecutar de manera interactiva para permitir navegación
         subprocess.run([sys.executable, "ver_tablas_db.py"], check=True)
-        print("✅ Visor de tablas cerrado")
+        print("✅ Consultor SQL cerrado")
     except subprocess.CalledProcessError as e:
         print(f"❌ Error al ejecutar ver_tablas_db.py: {e}")
     except FileNotFoundError:
