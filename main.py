@@ -8,12 +8,10 @@ def mostrar_menu():
     print("\n" + "="*50)
     print("    🗄️  GESTOR DE DATOS POSTGRESQL")
     print("="*50)
-    print("1. 📊 Generar nuevos datos (RandomUser API)")
-    print("2. 🕷️  Web scraping de productos")
-    print("3. 🚀 Scraper Integrado (Datos Completos)")
-    print("4. 📁 Cargar archivo CSV a la base de datos")
-    print("5. 📂 Ver archivos disponibles")
-    print("6. 🗄️ Ver tablas de la base de datos")
+    print("1. 🚀 Scraper Integrado (Datos Completos)")
+    print("2. 📁 Cargar archivo CSV a la base de datos")
+    print("3. 📂 Ver archivos disponibles")
+    print("4. 🗄️ Ver tablas de la base de datos")
     print("0. 🚪 Salir")
     print("="*50)
 
@@ -78,7 +76,7 @@ def ver_archivos_disponibles():
     
     if not os.path.exists(carpeta_archivos):
         print(f"\n📂 La carpeta '{carpeta_archivos}' no existe.")
-        print("💡 Ejecuta la opción 1 o 4 para generar datos y crear la carpeta.")
+        print("💡 Ejecuta la opción 1 (Scraper Integrado) para generar datos y crear la carpeta.")
         time.sleep(3)
         return
     
@@ -86,7 +84,7 @@ def ver_archivos_disponibles():
     
     if not archivos_csv:
         print(f"\n📂 No hay archivos CSV en la carpeta '{carpeta_archivos}'.")
-        print("💡 Ejecuta la opción 1 o 4 para generar algunos datos.")
+        print("💡 Ejecuta la opción 1 (Scraper Integrado) para generar algunos datos.")
         time.sleep(3)
         return
     
@@ -115,24 +113,18 @@ def main():
         mostrar_menu()
         
         try:
-            opcion = input("\nSelecciona una opción (0-6): ").strip()
+            opcion = input("\nSelecciona una opción (0-4): ").strip()
             
             if opcion == "1":
-                ejecutar_scrapyuser()
-                
-            elif opcion == "2":
-                ejecutar_scrapy_productos()
-                
-            elif opcion == "3":
                 ejecutar_scrapy_integrado()
                 
-            elif opcion == "4":
+            elif opcion == "2":
                 ejecutar_cargar_csv()
                 
-            elif opcion == "5":
+            elif opcion == "3":
                 ver_archivos_disponibles()
                 
-            elif opcion == "6":
+            elif opcion == "4":
                 ejecutar_ver_tablas()
                 
             elif opcion == "0":
@@ -140,7 +132,7 @@ def main():
                 break
                 
             else:
-                print("❌ Opción inválida. Por favor, selecciona 0, 1, 2, 3, 4, 5 o 6.")
+                print("❌ Opción inválida. Por favor, selecciona 0, 1, 2, 3 o 4.")
                 
         except KeyboardInterrupt:
             print("\n\n👋 ¡Hasta luego!")

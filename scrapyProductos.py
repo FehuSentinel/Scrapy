@@ -793,6 +793,7 @@ def obtener_o_crear_tienda_por_url(url_producto):
         return None, None
 
 def scrapear_yapo(termino, cantidad):
+    import re
     url = f"https://www.yapo.cl/autos-usados?q={termino}"
     headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(url, headers=headers)
@@ -802,31 +803,73 @@ def scrapear_yapo(termino, cantidad):
     for anuncio in anuncios:
         if len(resultados) >= cantidad:
             break
+        # Título y marca
         titulo_elem = anuncio.find('span', class_='d3-ad-tile__title')
         titulo = titulo_elem.text.strip() if titulo_elem else ''
         marca = titulo.split()[0] if titulo else ''
+        # Precio
         precio_elem = anuncio.find('div', class_='d3-ad-tile__price')
         precio_texto = precio_elem.text.strip() if precio_elem else ''
-        
-        # Convertir precio a decimal
         precio = limpiar_precio(precio_texto)
-        
+        # Descuento
+        descuento_elem = anuncio.find('span', class_='d3-ad-tile__price-reduction')
+        descuento = limpiar_descuento(descuento_elem.text.strip()) if descuento_elem else None
+        # Urgente
+        urgente_elem = anuncio.find('div', class_='d3-ad-tile__hallmark')
+        urgente = urgente_elem.text.strip() if urgente_elem else ''
+        # Vendedor
+        vendedor_elem = anuncio.find('div', class_='d3-ad-tile__seller')
+        vendedor = vendedor_elem.find('span').text.strip() if vendedor_elem and vendedor_elem.find('span') else ''
+        # Ubicación
+        ubicacion_elem = anuncio.find('div', class_='d3-ad-tile__location')
+        # Extraer solo la comuna/ciudad (primer fragmento antes de salto de línea o después del ícono)
+        if ubicacion_elem:
+            ubicacion_texto = ubicacion_elem.get_text(strip=True)
+            ubicacion = ubicacion_texto.split('\n')[0].strip()
+            # Si hay un ícono, puede haber espacios, tomar solo la parte después del ícono
+            if ' ' in ubicacion:
+                ubicacion = ubicacion.split(' ', 1)[-1].strip()
+        else:
+            ubicacion = 'No disponible'
+        # Descripción
+        descripcion_elem = anuncio.find('div', class_='d3-ad-tile__short-description')
+        descripcion = descripcion_elem.text.strip() if descripcion_elem else ''
+        # Año, combustible, transmisión, kilometraje
+        detalles = anuncio.find_all('li', class_='d3-ad-tile__details-item')
+        anio = combustible = transmision = kilometraje = ''
+        if len(detalles) >= 4:
+            anio = detalles[0].text.strip()
+            combustible = detalles[1].text.strip()
+            transmision = detalles[2].text.strip()
+            kilometraje = detalles[3].text.strip()
+            kilometraje = re.sub(r'[^\d]', '', kilometraje)  # Solo números
+        # URL del producto
         url_producto = anuncio['href'] if anuncio.has_attr('href') else ''
         if url_producto and not url_producto.startswith('http'):
             url_producto = 'https://www.yapo.cl' + url_producto
-        
-        # Obtener id_tienda y dirección
-        id_tienda, direccion_tienda = obtener_o_crear_tienda_por_url(url_producto)
-        
+        # Tienda y dirección
+        tienda_nombre = 'Yapo'
+        tienda_url = 'https://www.yapo.cl'
+        tienda_direccion = ubicacion
+        # Diccionario de producto completo
         resultados.append({
             'nombre': titulo,
             'marca': marca,
             'precio': precio,
-            'descuento': None,
-            'preciofinal': precio,
+            'descuento': descuento,
+            'preciofinal': precio,  # Asumimos precio final igual al precio si no hay descuento
             'url_producto': url_producto,
-            'id_tienda': id_tienda,
-            'direccion_tienda': direccion_tienda
+            'vendedor': vendedor,
+            'urgente': urgente,
+            'anio': anio,
+            'combustible': combustible,
+            'transmision': transmision,
+            'kilometraje': kilometraje,
+            'descripcion': descripcion,
+            'id_tienda': 1,  # Asumimos 1 para Yapo
+            'nombre_tienda': tienda_nombre,
+            'direccion_tienda': tienda_direccion,
+            'url_tienda': tienda_url
         })
     return resultados
 
@@ -1078,20 +1121,14 @@ def guardar_resultados(resultados, columnas, nombre_archivo):
 
 def main():
     print("\n==================================================")
-    print("🕷️  SCRAPER MULTITIENDAS")
+    print("🗷  SCRAPER MULTITIENDAS")
     print("==================================================")
-    
-    # Seleccionar tienda del listado
     url = seleccionar_tienda()
-    
     print(f"\n✅ URL seleccionada: {url}")
-    
-    # Obtener parámetros de búsqueda
     termino = input("\n🔍 ¿Qué quieres buscar?: ").strip()
     if not termino:
         print("❌ Término de búsqueda no válido.")
         return
-    
     try:
         cantidad = int(input("📊 ¿Cuántos productos quieres obtener?: ").strip())
         if cantidad <= 0:
@@ -1100,23 +1137,18 @@ def main():
     except ValueError:
         print("❌ Cantidad no válida. Debe ser un número.")
         return
-    
     nombre_archivo = input("💾 Nombre del archivo (sin extensión): ").strip()
     if not nombre_archivo:
         print("❌ Nombre de archivo no válido.")
         return
-    
     print(f"\n🔄 Iniciando scraping...")
     print(f"   URL: {url}")
     print(f"   Búsqueda: '{termino}'")
     print(f"   Cantidad: {cantidad} productos")
     print(f"   Archivo: {nombre_archivo}")
     print("-" * 50)
-    
-    # Determinar qué función de scraping usar
     tienda = detectar_tienda(url)
     resultados = []
-    
     try:
         if tienda == 'yapo':
             resultados = scrapear_yapo(termino, cantidad)
@@ -1129,16 +1161,17 @@ def main():
         else:
             print(f"❌ Tienda no soportada para la URL: {url}")
             return
-        
-        # Guardar resultados
         if resultados:
-            columnas = ['nombre', 'marca', 'precio', 'descuento', 'preciofinal', 'url_producto', 'id_tienda', 'direccion_tienda']
+            columnas = [
+                'nombre', 'marca', 'precio', 'descuento', 'preciofinal', 'url_producto',
+                'vendedor', 'urgente', 'anio', 'combustible', 'transmision', 'kilometraje',
+                'descripcion', 'id_tienda', 'nombre_tienda', 'direccion_tienda', 'url_tienda'
+            ]
             guardar_resultados(resultados, columnas, nombre_archivo)
             print(f"\n✅ Scraping completado exitosamente!")
             print(f"📊 Productos encontrados: {len(resultados)}")
         else:
             print("❌ No se encontraron productos.")
-            
     except Exception as e:
         print(f"❌ Error durante el scraping: {e}")
         print("💡 Sugerencias:")

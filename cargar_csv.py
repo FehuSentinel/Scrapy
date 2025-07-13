@@ -47,134 +47,139 @@ def mostrar_menu_tablas(tablas_disponibles):
     print("="*50)
 
 def procesar_archivo_completo(df, archivo_elegido):
-    """Procesa un archivo completo con todas las tablas"""
+    """Procesa un archivo completo con todas las tablas, sin usar IDs del archivo"""
     print(f"\n🚀 PROCESANDO ARCHIVO COMPLETO: {archivo_elegido}")
     print("="*60)
-    
-    # Verificar que el archivo tenga las columnas necesarias para todas las tablas
+    # Columnas requeridas (sin IDs)
     columnas_requeridas = [
-        'id_usuario', 'nombre_usuario', 'apellido_usuario', 'email_usuario', 'edad_usuario', 'sexo_usuario',
-        'id_tienda', 'nombre_tienda', 'direccion_tienda', 'url_tienda',
-        'id_producto', 'nombre_producto', 'marca_producto', 'precio_producto', 'url_producto', 'promocion_producto', 'precio_final_producto',
-        'id_promocion', 'tipo_promocion', 'fecha_inicio_promocion', 'fecha_fin_promocion',
-        'id_tiempo', 'fecha_venta', 'dia_venta', 'mes_venta', 'año_venta', 'trimestre_venta', 'festivo_venta',
-        'id_venta', 'cantidad_vendida', 'precio_unitario', 'descuento_unitario', 'precio_final_unitario', 'total_bruto', 'total_descuento', 'total_neto'
+        'nombre_usuario', 'apellido_usuario', 'email_usuario', 'edad_usuario', 'sexo_usuario',
+        'nombre_tienda', 'direccion_tienda', 'url_tienda',
+        'nombre_producto', 'marca_producto', 'precio_producto', 'url_producto',
+        'tipo_promocion', 'fecha_inicio_promocion', 'fecha_fin_promocion',
+        'fecha_venta', 'dia_venta', 'mes_venta', 'año_venta', 'trimestre_venta', 'festivo_venta',
+        'cantidad_vendida', 'precio_unitario', 'descuento_unitario', 'precio_final_unitario', 'total_bruto', 'total_descuento', 'total_neto'
     ]
-    
     faltantes = [col for col in columnas_requeridas if col not in df.columns]
     if faltantes:
         print(f"❌ [ERROR] El archivo no es un archivo completo. Faltan columnas:")
-        for col in faltantes[:10]:  # Mostrar solo las primeras 10
+        for col in faltantes[:10]:
             print(f"   - {col}")
         if len(faltantes) > 10:
             print(f"   ... y {len(faltantes) - 10} más")
         print("\n💡 Este archivo debe ser generado por el Scraper Integrado (Opción 3)")
         return False
-    
     print("✅ Archivo completo detectado. Procesando todas las tablas...")
-    
     try:
-        # 1. Procesar USUARIOS
-        print(f"\n👥 Procesando USUARIOS...")
-        usuarios_df = df[['id_usuario', 'nombre_usuario', 'apellido_usuario', 'email_usuario', 'edad_usuario', 'sexo_usuario']].drop_duplicates()
-        usuarios_df.columns = ['id_usuario', 'nombre', 'apellido', 'email', 'edad', 'sexo']
-        usuarios_df.to_sql('usuarios', engine, if_exists='append', index=False)
-        print(f"   ✅ {len(usuarios_df)} usuarios cargados")
-        
-        # 2. Procesar TIENDAS (PRIMERO para evitar problemas de FK)
-        print(f"\n🏪 Procesando TIENDAS...")
-        tiendas_df = df[['id_tienda', 'nombre_tienda', 'direccion_tienda', 'url_tienda']].drop_duplicates()
-        tiendas_df.columns = ['id_tienda', 'nombre', 'direccion', 'url']
-        tiendas_df.to_sql('tienda', engine, if_exists='append', index=False)
-        print(f"   ✅ {len(tiendas_df)} tiendas cargadas")
-        
-        # 3. Procesar PROMOCIONES
-        print(f"\n🎯 Procesando PROMOCIONES...")
-        promociones_df = df[['id_promocion', 'tipo_promocion', 'fecha_inicio_promocion', 'fecha_fin_promocion']].drop_duplicates()
-        promociones_df.columns = ['id_promocion', 'tipo_promocion', 'fecha_inicio', 'fecha_fin']
-        # Filtrar solo promociones válidas (id_promocion > 0)
-        promociones_df = promociones_df[promociones_df['id_promocion'] > 0]
-        if len(promociones_df) > 0:
-            promociones_df.to_sql('promocion', engine, if_exists='append', index=False)
-            print(f"   ✅ {len(promociones_df)} promociones cargadas")
-        else:
-            print(f"   ⚠️ No hay promociones válidas para cargar")
-        
-        # 4. Procesar PRODUCTOS (con manejo de promociones)
-        print(f"\n🛍️ Procesando PRODUCTOS...")
-        productos_df = df[['id_producto', 'nombre_producto', 'marca_producto', 'precio_producto', 'url_producto', 'promocion_producto', 'precio_final_producto', 'id_tienda']].drop_duplicates()
-        productos_df.columns = ['id_producto', 'nombre', 'marca', 'precio', 'url_producto', 'promocion', 'preciofinal', 'id_tienda']
-        
-        # Manejar promociones: convertir 0 a NULL para evitar problemas de FK
-        productos_df['promocion'] = productos_df['promocion'].replace(0, None)
-        productos_df['promocion'] = productos_df['promocion'].where(productos_df['promocion'] > 0, None)
-        
-        productos_df.to_sql('productos', engine, if_exists='append', index=False)
-        print(f"   ✅ {len(productos_df)} productos cargados")
-        
-        # 5. Procesar TIEMPO
-        print(f"\n⏰ Procesando TIEMPO...")
-        tiempo_df = df[['id_tiempo', 'fecha_venta', 'dia_venta', 'mes_venta', 'año_venta', 'trimestre_venta', 'festivo_venta']].drop_duplicates()
-        tiempo_df.columns = ['id_tiempo', 'fecha', 'dia', 'mes', 'año', 'trimestre', 'festivo']
-        tiempo_df.to_sql('tiempo', engine, if_exists='append', index=False)
-        print(f"   ✅ {len(tiempo_df)} registros de tiempo cargados")
-        
-        # 6. Procesar VENTAS
-        print(f"\n💰 Procesando VENTAS...")
-        
-        # Verificar qué columnas de ventas están disponibles
-        columnas_ventas_disponibles = [
-            'id_venta', 'id_usuario', 'id_producto', 'id_tienda', 'id_tiempo', 'id_promocion', 
-            'cantidad_vendida', 'precio_unitario', 'descuento_unitario', 'precio_final_unitario', 
-            'total_bruto', 'total_descuento', 'total_neto'
-        ]
-        
-        columnas_ventas_existentes = [col for col in columnas_ventas_disponibles if col in df.columns]
-        
-        print(f"   📋 Columnas de ventas encontradas: {columnas_ventas_existentes}")
-        
-        # Si falta id_tienda, asignar un valor por defecto
-        if 'id_tienda' not in df.columns:
-            print(f"   ⚠️ Columna 'id_tienda' no encontrada, asignando valor por defecto (1)")
-            ventas_df = df[columnas_ventas_existentes].copy()
-            ventas_df['id_tienda'] = 1  # Valor por defecto
-        else:
-            ventas_df = df[columnas_ventas_existentes].copy()
-        
-        # Renombrar columnas para coincidir con el modelo
-        columnas_finales = ['id_venta', 'id_usuario', 'id_producto', 'id_tienda', 'id_tiempo', 'id_promocion', 'cantidad_vendida', 'precio_unitario', 'descuento_unitario', 'precio_final_unitario', 'total_bruto', 'total_descuento', 'total_neto']
-        
-        # Asegurar que todas las columnas necesarias estén presentes
-        for col in columnas_finales:
-            if col not in ventas_df.columns:
-                if col == 'id_tienda':
-                    ventas_df[col] = 1  # Valor por defecto
-                elif col == 'id_promocion':
-                    ventas_df[col] = None  # NULL por defecto
-                else:
-                    ventas_df[col] = 0  # 0 por defecto para otros campos
-        
-        # Reordenar columnas
-        ventas_df = ventas_df[columnas_finales]
-        
-        # Manejar promociones en ventas: convertir 0 a NULL
-        ventas_df['id_promocion'] = ventas_df['id_promocion'].replace(0, None)
-        ventas_df['id_promocion'] = ventas_df['id_promocion'].where(ventas_df['id_promocion'] > 0, None)
-        
-        ventas_df.to_sql('ventas', engine, if_exists='append', index=False)
-        print(f"   ✅ {len(ventas_df)} ventas cargadas")
-        
+        for idx, row in df.iterrows():
+            # 1. Usuario
+            usuario = session.query(models.Usuario).filter_by(email=row['email_usuario']).first()
+            if not usuario:
+                usuario = models.Usuario(
+                    nombre=row['nombre_usuario'],
+                    apellido=row['apellido_usuario'],
+                    email=row['email_usuario'],
+                    edad=row['edad_usuario'],
+                    sexo=row['sexo_usuario']
+                )
+                session.add(usuario)
+                session.commit()
+            id_usuario = usuario.id_usuario
+            # 2. Dirección
+            direccion_calle = str(row['direccion_tienda'])[:100]
+            direccion = session.query(models.Direccion).filter_by(calle=direccion_calle).first()
+            if not direccion:
+                direccion = models.Direccion(
+                    calle=direccion_calle,
+                    numero='N/A',
+                    comuna='N/A',
+                    ciudad=direccion_calle[:50],
+                    region='N/A'
+                )
+                session.add(direccion)
+                session.commit()
+            id_direccion = direccion.id_direccion
+            # 3. Tienda
+            tienda = session.query(models.Tienda).filter_by(nombre=row['nombre_tienda']).first()
+            if not tienda:
+                tienda = models.Tienda(
+                    nombre=row['nombre_tienda'],
+                    direccion=row['direccion_tienda'],
+                    url=row['url_tienda'],
+                    id_direccion=id_direccion
+                )
+                session.add(tienda)
+                session.commit()
+            id_tienda = tienda.id_tienda
+            # 4. Promoción (si existe)
+            id_promocion = None
+            if pd.notna(row['tipo_promocion']) and row['tipo_promocion']:
+                promocion = session.query(models.Promocion).filter_by(
+                    tipo_promocion=row['tipo_promocion'],
+                    fecha_inicio=row['fecha_inicio_promocion'],
+                    fecha_fin=row['fecha_fin_promocion']
+                ).first()
+                if not promocion:
+                    promocion = models.Promocion(
+                        tipo_promocion=row['tipo_promocion'],
+                        fecha_inicio=row['fecha_inicio_promocion'],
+                        fecha_fin=row['fecha_fin_promocion']
+                    )
+                    session.add(promocion)
+                    session.commit()
+                id_promocion = promocion.id_promocion
+            # 5. Producto
+            producto = session.query(models.Producto).filter_by(
+                nombre=row['nombre_producto'],
+                url_producto=row['url_producto'],
+                id_tienda=id_tienda
+            ).first()
+            if not producto:
+                producto = models.Producto(
+                    nombre=row['nombre_producto'],
+                    marca=row['marca_producto'],
+                    precio=row['precio_producto'],
+                    url_producto=row['url_producto'],
+                    promocion=id_promocion,
+                    preciofinal=row['precio_producto'],
+                    id_tienda=id_tienda
+                )
+                session.add(producto)
+                session.commit()
+            id_producto = producto.id_producto
+            # 6. Tiempo
+            tiempo = session.query(models.Tiempo).filter_by(fecha=row['fecha_venta']).first()
+            if not tiempo:
+                tiempo = models.Tiempo(
+                    fecha=row['fecha_venta'],
+                    dia=row['dia_venta'],
+                    mes=row['mes_venta'],
+                    año=row['año_venta'],
+                    trimestre=row['trimestre_venta'],
+                    festivo=row['festivo_venta']
+                )
+                session.add(tiempo)
+                session.commit()
+            id_tiempo = tiempo.id_tiempo
+            # 7. Venta
+            venta = models.Venta(
+                id_usuario=id_usuario,
+                id_producto=id_producto,
+                id_tienda=id_tienda,
+                id_tiempo=id_tiempo,
+                id_promocion=id_promocion,
+                cantidad_vendida=row['cantidad_vendida'],
+                precio_unitario=row['precio_unitario'],
+                descuento_unitario=row['descuento_unitario'],
+                precio_final_unitario=row['precio_final_unitario'],
+                total_bruto=row['total_bruto'],
+                total_descuento=row['total_descuento'],
+                total_neto=row['total_neto']
+            )
+            session.add(venta)
+            session.commit()
         print(f"\n🎉 ¡ARCHIVO COMPLETO PROCESADO EXITOSAMENTE!")
-        print(f"📊 Resumen:")
-        print(f"   👥 Usuarios: {len(usuarios_df)}")
-        print(f"   🏪 Tiendas: {len(tiendas_df)}")
-        print(f"   🛍️ Productos: {len(productos_df)}")
-        print(f"   🎯 Promociones: {len(promociones_df)}")
-        print(f"   ⏰ Tiempo: {len(tiempo_df)}")
-        print(f"   💰 Ventas: {len(ventas_df)}")
-        
+        print(f"📊 Registros procesados: {len(df)}")
         return True
-        
     except Exception as e:
         print(f"❌ [ERROR] Error al procesar archivo completo: {e}")
         print(f"📋 Columnas disponibles en el archivo: {list(df.columns)}")
@@ -478,122 +483,13 @@ def main():
         print(f"📊 [INFO] Filas: {len(df)}")
         print(f"📋 [INFO] Columnas: {list(df.columns)}")
         
-        # Listar tablas disponibles desde models.py
-        tablas_disponibles = {}
-        for nombre_clase in dir(models):
-            objeto = getattr(models, nombre_clase)
-            if hasattr(objeto, '__tablename__'):
-                tablas_disponibles[objeto.__tablename__] = objeto
-        
-        if not tablas_disponibles:
-            print("❌ [ERROR] No hay tablas definidas en models.py")
-            return
-        
-        # Menú de tablas
-        while True:
-            mostrar_menu_tablas(tablas_disponibles)
-            op_tabla = input("¿A qué tabla deseas subir los datos? (elige número): ").strip()
-            
-            if op_tabla == "0":
-                print("🔙 Volviendo a selección de archivo...")
-                break
-            
-            if not op_tabla.isdigit() or int(op_tabla) < 1 or int(op_tabla) > len(tablas_disponibles) + 1:
-                print("❌ [ERROR] Opción inválida.")
-                continue
-            
-            # Procesar según la opción seleccionada
-            if int(op_tabla) == len(tablas_disponibles) + 1:
-                # Opción: Subir archivo completo
-                if procesar_archivo_completo(df, archivo_elegido):
-                    print(f"\n✅ [OK] '{archivo_elegido}' fue procesado completamente.")
-                else:
-                    print(f"\n❌ [ERROR] Error al procesar '{archivo_elegido}' como archivo completo.")
-                break
-            else:
-                # Opción: Subir a tabla específica
-                nombre_tabla = list(tablas_disponibles.keys())[int(op_tabla) - 1]
-                clase_modelo = tablas_disponibles[nombre_tabla]
-                
-                # Procesar según el tipo de tabla
-                if nombre_tabla == 'productos':
-                    # Verificar columnas requeridas para productos
-                    columnas_requeridas = ['nombre']
-                    faltantes = [col for col in columnas_requeridas if col not in df.columns]
-                    if faltantes:
-                        print("❌ [ERROR] Faltan columnas requeridas:", faltantes)
-                        print("💡 [AYUDA] El archivo debe contener al menos: nombre")
-                        continue
-                    
-                    # Procesar productos
-                    if procesar_productos(df, nombre_tabla):
-                        print(f"✅ [OK] '{archivo_elegido}' fue cargado correctamente a la tabla '{nombre_tabla}'.")
-                    else:
-                        print(f"❌ [ERROR] Error al cargar '{archivo_elegido}' a la tabla '{nombre_tabla}'.")
-                    break
-
-                elif nombre_tabla == 'usuarios':
-                    # Verificar columnas requeridas para usuarios
-                    columnas_requeridas = ['nombre', 'apellido', 'email']
-                    faltantes = [col for col in columnas_requeridas if col not in df.columns]
-                    if faltantes:
-                        print("❌ [ERROR] Faltan columnas requeridas:", faltantes)
-                        print("💡 [AYUDA] El archivo debe contener: nombre, apellido, email")
-                        continue
-                    
-                    # Procesar usuarios
-                    if procesar_usuarios(df, nombre_tabla):
-                        print(f"✅ [OK] '{archivo_elegido}' fue cargado correctamente a la tabla '{nombre_tabla}'.")
-                    else:
-                        print(f"❌ [ERROR] Error al cargar '{archivo_elegido}' a la tabla '{nombre_tabla}'.")
-                    break
-
-                elif nombre_tabla == 'tienda':
-                    # Verificar columnas requeridas para tiendas
-                    columnas_requeridas = ['nombre']
-                    faltantes = [col for col in columnas_requeridas if col not in df.columns]
-                    if faltantes:
-                        print("❌ [ERROR] Faltan columnas requeridas:", faltantes)
-                        print("💡 [AYUDA] El archivo debe contener al menos: nombre")
-                        continue
-                    
-                    # Procesar tiendas
-                    if procesar_tiendas(df, nombre_tabla):
-                        print(f"✅ [OK] '{archivo_elegido}' fue cargado correctamente a la tabla '{nombre_tabla}'.")
-                    else:
-                        print(f"❌ [ERROR] Error al cargar '{archivo_elegido}' a la tabla '{nombre_tabla}'.")
-                    break
-
-                else:
-                    # Para otras tablas, usar el proceso genérico
-                    # Obtener columnas del modelo
-                    columnas_modelo = [col.name for col in clase_modelo.__table__.columns]
-                    columna_id = columnas_modelo[0]  # asumimos la primera es la PK
-                    columnas_modelo_sin_id = columnas_modelo[1:]
-                    columnas_modelo_lower = [c.lower() for c in columnas_modelo_sin_id]
-
-                    # Validar campos requeridos
-                    faltantes = [col for col in columnas_modelo_lower if col not in df.columns]
-                    if faltantes:
-                        print("❌ [ERROR] Faltan columnas requeridas:", faltantes)
-                        print("💡 [AYUDA] Asegúrate de que tu archivo CSV contenga todas las columnas necesarias.")
-                        continue
-
-                    # Renombrar columnas para coincidir con modelo real (respetando mayúsculas)
-                    renombres = {}
-                    for col_modelo in columnas_modelo_sin_id:
-                        col_csv = col_modelo.lower()
-                        if col_csv in df.columns:
-                            renombres[col_csv] = col_modelo
-
-                    df.rename(columns=renombres, inplace=True)
-
-                    # Subir a tabla
-                    df = df[renombres.values()]  # reordenar columnas si es necesario
-                    df.to_sql(nombre_tabla, engine, if_exists='append', index=False)
-
-                    print(f"✅ [OK] '{archivo_elegido}' fue cargado correctamente a la tabla '{nombre_tabla}'.")
-                    break
+        # Procesar automáticamente como archivo completo
+        print("\n🚀 PROCESANDO ARCHIVO COMO COMPLETO...")
+        if procesar_archivo_completo(df, archivo_elegido):
+            print(f"\n✅ [OK] '{archivo_elegido}' fue procesado completamente.")
+        else:
+            print(f"\n❌ [ERROR] Error al procesar '{archivo_elegido}' como archivo completo.")
+            print("💡 [AYUDA] Asegúrate de que el archivo sea generado por el Scraper Integrado.")
         
         # Preguntar si quiere continuar con otro archivo
         continuar = input("\n¿Deseas cargar otro archivo? (s/n): ").strip().lower()

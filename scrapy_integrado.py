@@ -11,6 +11,7 @@ import time
 import sys
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
+from scrapyProductos import scrapear_yapo
 
 # Cargar variables de entorno
 load_dotenv('.env')
@@ -375,7 +376,7 @@ def simular_ventas_realistas(usuarios, productos, promociones, tiempo_registros)
             
             # Determinar si aplica promoción
             promocion_aplicada = None
-            if producto['promocion'] > 0:
+            if producto['promocion'] is not None: # Check if it's not None
                 promociones_disponibles = [p for p in promociones if 
                                          p['fecha_inicio'] <= fecha_venta['fecha'] <= p['fecha_fin']]
                 if promociones_disponibles:
@@ -414,61 +415,42 @@ def simular_ventas_realistas(usuarios, productos, promociones, tiempo_registros)
     return ventas
 
 def generar_archivo_completo(usuarios, productos, promociones, tiempo_registros, ventas, tienda_info, nombre_archivo):
-    """Genera un archivo CSV y Excel con todos los datos integrados"""
+    """Genera un archivo CSV y Excel con todos los datos integrados, sin IDs, solo datos descriptivos y de referencia"""
     print("📊 Generando archivo completo...")
-    
-    # Crear DataFrame con todos los datos
     datos_completos = []
-    
     for venta in ventas:
-        # Buscar información relacionada
         usuario = next((u for u in usuarios if u['id_usuario'] == venta['id_usuario']), {})
         producto = next((p for p in productos if p['id_producto'] == venta['id_producto']), {})
         promocion = next((p for p in promociones if p['id_promocion'] == venta['id_promocion']), {}) if venta['id_promocion'] else {}
         tiempo = next((t for t in tiempo_registros if t['id_tiempo'] == venta['id_tiempo']), {})
-        
-        # Crear registro completo
         registro = {
-            # Información de Usuario
-            'id_usuario': usuario.get('id_usuario'),
+            # Usuario
             'nombre_usuario': usuario.get('nombre'),
             'apellido_usuario': usuario.get('apellido'),
             'email_usuario': usuario.get('email'),
             'edad_usuario': usuario.get('edad'),
             'sexo_usuario': usuario.get('sexo'),
-            
-            # Información de Tienda
-            'id_tienda': tienda_info.get('id_tienda'),
+            # Tienda
             'nombre_tienda': tienda_info.get('nombre'),
             'direccion_tienda': tienda_info.get('direccion'),
             'url_tienda': tienda_info.get('url'),
-            
-            # Información de Producto
-            'id_producto': producto.get('id_producto'),
+            # Producto
             'nombre_producto': producto.get('nombre'),
             'marca_producto': producto.get('marca'),
             'precio_producto': producto.get('precio'),
             'url_producto': producto.get('url_producto'),
-            'promocion_producto': producto.get('promocion'),
-            'precio_final_producto': producto.get('preciofinal'),
-            
-            # Información de Promoción
-            'id_promocion': promocion.get('id_promocion'),
+            # Promoción
             'tipo_promocion': promocion.get('tipo_promocion'),
             'fecha_inicio_promocion': promocion.get('fecha_inicio'),
             'fecha_fin_promocion': promocion.get('fecha_fin'),
-            
-            # Información de Tiempo
-            'id_tiempo': tiempo.get('id_tiempo'),
+            # Tiempo
             'fecha_venta': tiempo.get('fecha'),
             'dia_venta': tiempo.get('dia'),
             'mes_venta': tiempo.get('mes'),
             'año_venta': tiempo.get('año'),
             'trimestre_venta': tiempo.get('trimestre'),
             'festivo_venta': tiempo.get('festivo'),
-            
-            # Información de Venta
-            'id_venta': venta.get('id_venta'),
+            # Venta
             'cantidad_vendida': venta.get('cantidad_vendida'),
             'precio_unitario': venta.get('precio_unitario'),
             'descuento_unitario': venta.get('descuento_unitario'),
@@ -477,24 +459,16 @@ def generar_archivo_completo(usuarios, productos, promociones, tiempo_registros,
             'total_descuento': venta.get('total_descuento'),
             'total_neto': venta.get('total_neto')
         }
-        
         datos_completos.append(registro)
-    
-    # Crear DataFrame
     df = pd.DataFrame(datos_completos)
-    
-    # Guardar archivos
     csv_filename = os.path.join(CARPETA, f"{nombre_archivo}.csv")
     excel_filename = os.path.join(CARPETA, f"{nombre_archivo}.xlsx")
-    
     df.to_csv(csv_filename, index=False, encoding="utf-8-sig")
     df.to_excel(excel_filename, index=False)
-    
     print(f"✅ Archivos generados exitosamente:")
     print(f"   📄 CSV: {csv_filename}")
     print(f"   📊 Excel: {excel_filename}")
     print(f"   📊 Total de registros: {len(datos_completos)}")
-    
     return df
 
 def main():
@@ -559,26 +533,67 @@ def main():
     usuarios = generar_usuarios_con_edad(cantidad_usuarios)
     
     # 2. Scraping de productos
-    productos = scrapear_productos_con_promociones(
-        tienda_seleccionada['url'], 
-        termino_busqueda, 
-        cantidad_productos
-    )
+    if tienda_seleccionada['nombre'].lower() == 'yapo':
+        productos_raw = scrapear_yapo(termino_busqueda, cantidad_productos)
+        productos = []
+        promociones = []
+        promo_id_counter = 1
+        for i, prod in enumerate(productos_raw):
+            promo_id = None
+            # Si el producto tiene descuento real, crear promoción
+            if prod.get('descuento') and prod.get('descuento') > 0:
+                # Usar la fecha actual como inicio y fin (puedes mejorar esto si el scraping trae fechas)
+                fecha_inicio = datetime.now().date()
+                fecha_fin = fecha_inicio + timedelta(days=30)
+                promociones.append({
+                    "id_promocion": promo_id_counter,
+                    "tipo_promocion": "Descuento real Yapo",
+                    "fecha_inicio": fecha_inicio,
+                    "fecha_fin": fecha_fin
+                })
+                promo_id = promo_id_counter
+                promo_id_counter += 1
+            productos.append({
+                "id_producto": i + 1,
+                "nombre": prod.get('nombre', ''),
+                "marca": prod.get('marca', ''),
+                "precio": prod.get('precio', 0),
+                "url_producto": prod.get('url_producto', ''),
+                "promocion": promo_id,
+                "preciofinal": prod.get('preciofinal', 0),
+                "id_tienda": 1  # Yapo
+            })
+    else:
+        productos = scrapear_productos_con_promociones(
+            tienda_seleccionada['url'], 
+            termino_busqueda, 
+            cantidad_productos
+        )
+        promociones = []
+        promo_id_counter = 1
+        for producto in productos:
+            promo_id = None
+            if producto.get('promocion') and producto.get('promocion') > 0:
+                fecha_inicio = datetime.now().date()
+                fecha_fin = fecha_inicio + timedelta(days=30)
+                promociones.append({
+                    "id_promocion": promo_id_counter,
+                    "tipo_promocion": "Descuento real",
+                    "fecha_inicio": fecha_inicio,
+                    "fecha_fin": fecha_fin
+                })
+                promo_id = promo_id_counter
+                promo_id_counter += 1
+            producto['promocion'] = promo_id
+            producto['id_tienda'] = tienda_info['id_tienda']
     
-    # Asignar ID de tienda a productos
-    for producto in productos:
-        producto['id_tienda'] = tienda_info['id_tienda']
-    
-    # 3. Generar promociones
-    promociones = generar_promociones(productos)
-    
-    # 4. Generar tiempo
+    # 3. Generar tiempo
     tiempo_registros = generar_tiempo(promociones)
     
-    # 5. Simular ventas
+    # 4. Simular ventas
     ventas = simular_ventas_realistas(usuarios, productos, promociones, tiempo_registros)
     
-    # 6. Generar archivo completo
+    # 5. Generar archivo completo
     df_final = generar_archivo_completo(
         usuarios, productos, promociones, tiempo_registros, ventas, tienda_info, nombre_archivo
     )
