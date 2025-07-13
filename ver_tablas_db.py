@@ -155,7 +155,93 @@ def consultas_predefinidas():
     
     consultas = {
         "1": {
-            "nombre": "Productos con promociones",
+            "nombre": "📊 Rango etario con más ventas",
+            "sql": """
+                SELECT 
+                    CASE 
+                        WHEN CAST(u.edad AS INTEGER) BETWEEN 18 AND 25 THEN '18-25'
+                        WHEN CAST(u.edad AS INTEGER) BETWEEN 26 AND 35 THEN '26-35'
+                        WHEN CAST(u.edad AS INTEGER) BETWEEN 36 AND 45 THEN '36-45'
+                        WHEN CAST(u.edad AS INTEGER) BETWEEN 46 AND 55 THEN '46-55'
+                        ELSE '56+'
+                    END as rango_etario,
+                    COUNT(v.id_venta) as total_ventas,
+                    SUM(v.total_neto) as ingresos_totales,
+                    AVG(v.total_neto) as promedio_venta
+                FROM usuarios u
+                LEFT JOIN ventas v ON u.id_usuario = v.id_usuario
+                WHERE v.id_venta IS NOT NULL
+                GROUP BY rango_etario
+                ORDER BY total_ventas DESC;
+            """
+        },
+        "2": {
+            "nombre": "🏆 Producto más vendido (unidades)",
+            "sql": """
+                SELECT p.nombre as producto, p.marca,
+                       SUM(v.cantidad_vendida) as unidades_vendidas,
+                       COUNT(v.id_venta) as veces_vendido,
+                       SUM(v.total_neto) as ingresos_totales
+                FROM productos p
+                JOIN ventas v ON p.id_producto = v.id_producto
+                GROUP BY p.id_producto, p.nombre, p.marca
+                ORDER BY unidades_vendidas DESC
+                LIMIT 10;
+            """
+        },
+        "3": {
+            "nombre": "🌍 Región con mayor volumen de ventas",
+            "sql": """
+                SELECT d.region, 
+                       COUNT(v.id_venta) as total_ventas,
+                       SUM(v.total_neto) as ingresos_totales,
+                       COUNT(DISTINCT v.id_usuario) as usuarios_unicos
+                FROM ventas v
+                JOIN tienda t ON v.id_tienda = t.id_tienda
+                JOIN direccion d ON t.id_direccion = d.id_direccion
+                GROUP BY d.region
+                ORDER BY ingresos_totales DESC;
+            """
+        },
+        "4": {
+            "nombre": "🎯 Promoción que generó más ventas",
+            "sql": """
+                SELECT pr.tipo_promocion,
+                       COUNT(v.id_venta) as ventas_con_promocion,
+                       SUM(v.total_neto) as ingresos_totales,
+                       AVG(v.total_neto) as promedio_venta,
+                       COUNT(DISTINCT v.id_usuario) as usuarios_unicos
+                FROM promocion pr
+                JOIN ventas v ON pr.id_promocion = v.id_promocion
+                GROUP BY pr.id_promocion, pr.tipo_promocion
+                ORDER BY ventas_con_promocion DESC;
+            """
+        },
+        "5": {
+            "nombre": "📅 Día de la semana con más ventas",
+            "sql": """
+                SELECT 
+                    EXTRACT(DOW FROM t.fecha) as dia_semana,
+                    CASE EXTRACT(DOW FROM t.fecha)
+                        WHEN 0 THEN 'Domingo'
+                        WHEN 1 THEN 'Lunes'
+                        WHEN 2 THEN 'Martes'
+                        WHEN 3 THEN 'Miércoles'
+                        WHEN 4 THEN 'Jueves'
+                        WHEN 5 THEN 'Viernes'
+                        WHEN 6 THEN 'Sábado'
+                    END as nombre_dia,
+                    COUNT(v.id_venta) as ventas,
+                    SUM(v.total_neto) as ingresos_totales,
+                    AVG(v.total_neto) as promedio_venta
+                FROM ventas v
+                JOIN tiempo t ON v.id_tiempo = t.id_tiempo
+                GROUP BY dia_semana, nombre_dia
+                ORDER BY ventas DESC;
+            """
+        },
+        "6": {
+            "nombre": "🛍️ Productos con promociones",
             "sql": """
                 SELECT p.nombre, p.precio, p.preciofinal, pr.tipo_promocion, pr.fecha_inicio, pr.fecha_fin
                 FROM productos p
@@ -164,8 +250,8 @@ def consultas_predefinidas():
                 LIMIT 10;
             """
         },
-        "2": {
-            "nombre": "Ventas por tienda",
+        "7": {
+            "nombre": "🏪 Ventas por tienda",
             "sql": """
                 SELECT t.nombre as tienda, COUNT(v.id_venta) as total_ventas, 
                        SUM(v.total_neto) as ventas_totales
@@ -175,8 +261,8 @@ def consultas_predefinidas():
                 ORDER BY ventas_totales DESC;
             """
         },
-        "3": {
-            "nombre": "Usuarios con más compras",
+        "8": {
+            "nombre": "👥 Usuarios con más compras",
             "sql": """
                 SELECT u.nombre, u.apellido, u.email, COUNT(v.id_venta) as compras,
                        SUM(v.total_neto) as total_gastado
@@ -187,8 +273,8 @@ def consultas_predefinidas():
                 LIMIT 10;
             """
         },
-        "4": {
-            "nombre": "Promociones activas",
+        "9": {
+            "nombre": "🎉 Promociones activas",
             "sql": """
                 SELECT tipo_promocion, fecha_inicio, fecha_fin,
                        COUNT(p.id_producto) as productos_afectados
@@ -198,8 +284,8 @@ def consultas_predefinidas():
                 GROUP BY pr.id_promocion, tipo_promocion, fecha_inicio, fecha_fin;
             """
         },
-        "5": {
-            "nombre": "Ventas por mes",
+        "10": {
+            "nombre": "📈 Ventas por mes",
             "sql": """
                 SELECT t.año, t.mes, COUNT(v.id_venta) as ventas,
                        SUM(v.total_neto) as ingresos
@@ -212,12 +298,18 @@ def consultas_predefinidas():
     }
     
     while True:
-        print("\n📋 Consultas disponibles:")
-        for key, consulta in consultas.items():
-            print(f"{key}. {consulta['nombre']}")
+        print("\n📋 CONSULTAS DISPONIBLES:")
+        print("="*60)
+        print("📊 ANÁLISIS DE VENTAS POR EDAD Y DEMOGRAFÍA:")
+        for key in ["1", "2", "3", "4", "5"]:
+            print(f"{key}. {consultas[key]['nombre']}")
+        print("\n📈 CONSULTAS GENERALES:")
+        for key in ["6", "7", "8", "9", "10"]:
+            print(f"{key}. {consultas[key]['nombre']}")
         print("0. 🔙 Volver al menú principal")
+        print("="*60)
         
-        opcion = input("\nSelecciona una consulta (0-5): ").strip()
+        opcion = input("\nSelecciona una consulta (0-10): ").strip()
         
         if opcion == "0":
             break
@@ -265,7 +357,7 @@ def consultas_predefinidas():
             except Exception as e:
                 print(f"❌ Error en la consulta: {e}")
         else:
-            print("❌ Opción inválida")
+            print("❌ Opción inválida. Por favor, selecciona 0-10.")
 
 def ver_productos_con_promociones():
     """Muestra productos que tienen promociones"""
