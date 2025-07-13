@@ -128,19 +128,25 @@ def procesar_archivo_completo(df, archivo_elegido):
                     session.commit()
                 id_promocion = promocion.id_promocion
             # 5. Producto
+            # Manejar valores NaN en url_producto
+            url_producto = row['url_producto']
+            if pd.isna(url_producto) or url_producto == 'NaN' or url_producto == '':
+                url_producto = None
+            
+            # Buscar producto existente
             producto = session.query(models.Producto).filter_by(
                 nombre=row['nombre_producto'],
-                url_producto=row['url_producto'],
                 id_tienda=id_tienda
             ).first()
+            
             if not producto:
                 producto = models.Producto(
                     nombre=row['nombre_producto'],
-                    marca=row['marca_producto'],
-                    precio=row['precio_producto'],
-                    url_producto=row['url_producto'],
+                    marca=row['marca_producto'] if not pd.isna(row['marca_producto']) else None,
+                    precio=row['precio_producto'] if not pd.isna(row['precio_producto']) else None,
+                    url_producto=url_producto,
                     promocion=id_promocion,
-                    preciofinal=row['precio_producto'],
+                    preciofinal=row['precio_producto'] if not pd.isna(row['precio_producto']) else None,
                     id_tienda=id_tienda
                 )
                 session.add(producto)
